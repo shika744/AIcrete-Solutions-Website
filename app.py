@@ -39,7 +39,7 @@ LOGO_NAME = "logo.png"
 # ============================================================================
 
 # ============================================================================
-# NEW MODELS — trained on UHPC_Dataset Version-2 (2,188 mixes, 168 papers)
+# NEW MODELS — trained on a comprehensive UHPC experimental dataset (2,188 mixes)
 # All features in real kg/m3. Feature order must match exactly.
 # ============================================================================
 NEW_FEAT_COLS = [
@@ -69,6 +69,8 @@ MODEL_FLEXURAL   = "model_Peak_Flexural_MPa.pkl"   # 1024 rows, R²=0.72
 MODEL_FLEXURAL_MOR = "model_Flexural_MOR_MPa.pkl"  # 140 rows, R²=0.84
 MODEL_POROSITY   = "model_Porosity_pct.pkl"
 MODEL_SPLIT_T    = "model_Split_Tensile_MPa.pkl"
+MODEL_SHRINKAGE  = "model_Shrinkage_56day.pkl"      # 66 rows, R²=0.91
+MODEL_TOUGHNESS  = "model_Toughness_J.pkl"          # 202 rows, R²=0.93
 
 
 STANDARD_THRESHOLDS = {
@@ -1029,7 +1031,7 @@ FAQ_BOT = [
     {
         "keywords": ["accurate", "accuracy", "how accurate", "reliable", "r2", "r²", "error"],
         "question": "How accurate are the predictions?",
-        "answer": "All four prediction targets now use real trained models. V1 (Compressive Strength) R² = 0.98 on 810 mixes. V2 (Slump Flow) R² = 0.84 on 1,175 mixes (±22mm accuracy). V3 Flexural R² = 0.84, Split Tensile R² = 0.80, Porosity R² = 0.66 — all trained on 168 peer-reviewed papers covering 2,188 UHPC mixes. Full metrics on the Model Transparency page."
+        "answer": "All four prediction targets now use real trained models. V1 (Compressive Strength) R² = 0.98 on 810 mixes. V2 (Slump Flow) R² = 0.85 on 1,175 mixes (±14mm accuracy). V3 Flexural R² = 0.84, Split Tensile R² = 0.80, Porosity R² = 0.66, 56-day Shrinkage R² = 0.91, Toughness R² = 0.93. Full metrics on the Model Transparency page."
     },
     {
         "keywords": ["version 1", "v1", "compressive strength model"],
@@ -1039,12 +1041,12 @@ FAQ_BOT = [
     {
         "keywords": ["version 2", "v2", "fresh state", "slump", "workability"],
         "question": "What does Fresh-State Workability predict?",
-        "answer": "Fresh-State Workability predicts slump flow in mm from mix design parameters. Production Ready — R² = 0.84, trained on 1,175 mixes from 168 peer-reviewed papers, accuracy ±22mm."
+        "answer": "Fresh-State Workability predicts slump flow in mm from mix design parameters. Production Ready — R² = 0.84, accuracy ±22mm."
     },
     {
         "keywords": ["version 3", "v3", "durability", "design life", "service life", "porosity", "flexural"],
         "question": "What does Durability & Service Life predict?",
-        "answer": "Durability & Service Life predicts flexural strength (R² = 0.84), split tensile strength (R² = 0.80), porosity (R² = 0.66), and estimated design/service life based on exposure class. All models are Production Ready, trained on 168 peer-reviewed papers."
+        "answer": "Durability & Service Life predicts flexural strength (R² = 0.84), split tensile strength (R² = 0.80), porosity (R² = 0.66), and estimated design/service life based on exposure class. All models are Production Ready."
     },
     {
         "keywords": ["standard", "standards", "code", "eurocode", "aci", "which codes"],
@@ -1706,7 +1708,7 @@ elif page == "Fresh-State Workability":
     st.markdown("---")
     st.markdown("### Fresh-State Workability Prediction")
     if slump_model is not None:
-        st.info("**Production Ready** | R² = 0.85 | 1,175 Training Mixes | 168 peer-reviewed papers | Accuracy: ±14mm | Includes cement type")
+        st.info("**Production Ready** | R² = 0.85 | 1,175 Training Mixes | Accuracy: ±14mm | Includes cement type")
     else:
         st.warning(f"Model file {MODEL_SLUMP} not found — place it alongside the app to enable predictions.")
 
@@ -1781,6 +1783,8 @@ elif page == "Durability & Service Life":
     flex_mor      = load_optional_model(MODEL_FLEXURAL_MOR)
     split_model   = load_optional_model(MODEL_SPLIT_T)
     poro_model    = load_optional_model(MODEL_POROSITY)
+    shrink_model  = load_optional_model(MODEL_SHRINKAGE)
+    tough_model   = load_optional_model(MODEL_TOUGHNESS)
 
     st.markdown("---")
     st.markdown("### Durability & Longevity Assessment")
@@ -1790,7 +1794,8 @@ elif page == "Durability & Service Life":
         "MOR Flexural R² = 0.84 (140 mixes) | "
         "Split Tensile R² = 0.80 (237 mixes) | "
         "Porosity R² = 0.66 (239 mixes) | "
-        "Source: 168 peer-reviewed papers"
+        "56-day Shrinkage R² = 0.91 (66 mixes) | "
+        "Toughness R² = 0.93 (202 mixes)"
     )
 
     sm = st.session_state.shared_mix
@@ -1817,7 +1822,7 @@ elif page == "Durability & Service Life":
         if st.button("Predict Durability", key="predict_v3", width='stretch'):
             row = build_new_model_row(cement_v3, sf_v3, water_v3, sp_v3, fibre_v3)
 
-            # Flexural — use MOR model if available (higher R²), else peak
+            # Flexural
             if flex_mor is not None:
                 flexural = float(flex_mor.predict(row)[0])
                 flex_label = "MOR Flexural"
@@ -1828,14 +1833,10 @@ elif page == "Durability & Service Life":
                 flexural = max(8, min(50, 20 + (cement_v3-750)*0.01 + (sf_v3-150)*0.05))
                 flex_label = "Estimate"
 
-            # Split Tensile
             split_tensile = float(split_model.predict(row)[0]) if split_model else None
-
-            # Porosity
-            if poro_model is not None:
-                porosity = float(poro_model.predict(row)[0])
-            else:
-                porosity = max(2, min(18, 12 - (cement_v3-750)*0.005 - (sf_v3-150)*0.02))
+            porosity = float(poro_model.predict(row)[0]) if poro_model else max(2, min(18, 12-(cement_v3-750)*0.005-(sf_v3-150)*0.02))
+            shrinkage = float(shrink_model.predict(row)[0]) if shrink_model else None
+            toughness = float(tough_model.predict(row)[0]) if tough_model else None
 
             exposure_base = {"DC-1 (Dry)": 30, "DC-2 (Urban)": 50, "DC-3 (Wet)": 75,
                              "DC-4 (Marine)": 120, "DC-4X (Salt Spray)": 150}.get(exposure_class, 75)
@@ -1845,6 +1846,7 @@ elif page == "Durability & Service Life":
                 "flexural": flexural, "flex_label": flex_label,
                 "split_tensile": split_tensile,
                 "porosity": porosity, "design_life": design_life,
+                "shrinkage": shrinkage, "toughness": toughness,
                 "exposure_class": exposure_class, "curing_time": curing_time_v3,
                 "inputs": {
                     "Cement (kg/m3)": cement_v3, "Silica Fume (kg/m3)": sf_v3,
@@ -1853,12 +1855,70 @@ elif page == "Durability & Service Life":
                 },
             }
 
-            mc1, mc2, mc3, mc4 = st.columns(4)
-            with mc1: st.metric(flex_label, f"{flexural:.1f} MPa")
-            with mc2: st.metric("Split Tensile", f"{split_tensile:.1f} MPa" if split_tensile else "—")
-            with mc3: st.metric("Porosity", f"{porosity:.1f}%")
-            with mc4: st.metric("Design Life", f"{design_life:.0f} yrs", exposure_class)
+            # Row 1 — mechanical
+            st.markdown("#### Mechanical Properties")
+            mc1, mc2 = st.columns(2)
+            with mc1:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-title">{flex_label} (MPa)</div>
+                    <div class="metric-value">{flexural:.1f} MPa</div>
+                    <div class="metric-sub">R² = 0.84</div>
+                </div>""", unsafe_allow_html=True)
+            with mc2:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-title">Split Tensile (MPa)</div>
+                    <div class="metric-value">{f"{split_tensile:.1f} MPa" if split_tensile else "—"}</div>
+                    <div class="metric-sub">R² = 0.80</div>
+                </div>""", unsafe_allow_html=True)
 
+            if toughness is not None:
+                mc3, mc4 = st.columns(2)
+                with mc3:
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div class="metric-title">Toughness (J)</div>
+                        <div class="metric-value">{toughness:.1f} J</div>
+                        <div class="metric-sub">R² = 0.93 | Energy absorption</div>
+                    </div>""", unsafe_allow_html=True)
+                with mc4:
+                    if shrinkage is not None:
+                        st.markdown(f"""
+                        <div class="metric-card">
+                            <div class="metric-title">56-day Shrinkage (µstrain)</div>
+                            <div class="metric-value">{shrinkage:.0f} µε</div>
+                            <div class="metric-sub">R² = 0.91 | Dimensional stability</div>
+                        </div>""", unsafe_allow_html=True)
+
+            # Row 2 — durability
+            st.markdown("#### Durability & Service Life")
+            dc1, dc2, dc3 = st.columns(3)
+            with dc1:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-title">Porosity (%)</div>
+                    <div class="metric-value">{porosity:.1f}%</div>
+                    <div class="metric-sub">R² = 0.66</div>
+                </div>""", unsafe_allow_html=True)
+            with dc2:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-title">Design Life (years)</div>
+                    <div class="metric-value">{design_life:.0f} yrs</div>
+                    <div class="metric-sub">{exposure_class}</div>
+                </div>""", unsafe_allow_html=True)
+            with dc3:
+                life_label = "Excellent" if design_life >= 100 else ("Good" if design_life >= 60 else "Moderate")
+                life_color = "#2f5870" if design_life >= 100 else ("#d98c2b" if design_life >= 60 else "#c0392b")
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-title">Durability Rating</div>
+                    <div class="metric-value" style="color:{life_color}">{life_label}</div>
+                    <div class="metric-sub">Based on porosity & exposure</div>
+                </div>""", unsafe_allow_html=True)
+
+            st.markdown("---")
             if design_life >= 100:
                 st.success(f"Excellent durability in {exposure_class}: {design_life:.0f} year design life — suitable for long-life structures")
             elif design_life >= 60:
@@ -1917,7 +1977,7 @@ AIcrete Solutions now spans three prediction models, each with its own scope and
 | Version | Predicts | Status | Key Limitations |
 |---|---|---|---|
 | **V1 — Compressive Strength** | 28-day compressive strength | ✅ Production | Cement type not differentiated (total cement content only); temperature treated as a linear feature; aggregate type/grading not specified; predicts 28-day strength only |
-| **V2 — Fresh-State** | Slump flow (workability) | ✅ Production Ready | R² = 0.85, ±14mm accuracy, 1,175 training mixes, 168 papers. Features include cement type (CEM I 42.5/52.5, Type V HS, CEM II/III) — verified 7.1% importance |
+| **V2 — Fresh-State** | Slump flow (workability) | ✅ Production Ready | R² = 0.85, ±14mm accuracy, 1,175 training mixes. Features include cement type (CEM I 42.5/52.5, Type V HS, CEM II/III) — verified 7.1% importance |
 | **V3 — Durability** | Flexural strength, split tensile, porosity, design life | ✅ Production Ready | Peak Flexural R² = 0.72 (1,024 mixes), MOR Flexural R² = 0.84 (140 mixes), Split Tensile R² = 0.80 (237 mixes), Porosity R² = 0.66 (239 mixes) |
 
 **Cross-cutting limitations (all versions):**
@@ -1997,7 +2057,7 @@ The following validation results have been confirmed by independent beta testers
 AIcrete Solutions is committed to transparent, iterative improvement. We actively incorporate beta tester feedback into each model version:
 
 - **Version 1 (Compressive Strength):** ✅ Production — core strength prediction, 12 standards, 8+ derived properties
-- **Version 2 (Fresh-State):** ✅ Production Ready — slump flow prediction with cement type, R² = 0.85, 1,175 training mixes, 168 peer-reviewed papers
+- **Version 2 (Fresh-State):** ✅ Production Ready — slump flow prediction with cement type, R² = 0.85, 1,175 training mixes
 - **Version 3 (Durability):** ✅ Production Ready — flexural strength (R² = 0.84), split tensile (R² = 0.80), porosity (R² = 0.66), design life estimation
 
 We welcome technical feedback from engineers and researchers. Please use the feedback form or contact us directly.

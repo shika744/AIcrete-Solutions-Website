@@ -732,7 +732,7 @@ def generate_pdf(result, filename="AIcrete_Report.pdf", v2_result=None, v3_resul
         pdf.ln(3)
         pdf.set_font("Helvetica", "I", 9)
         pdf.multi_cell(0, 5, pdf_safe(
-            "Note: Cost estimates are indicative only, based on approximate USD unit rates. "
+            "Note: Cost estimates are indicative only, based on indicative GBP unit rates (UK market 2025). "
             "Local material prices will vary significantly by region and supplier."
         ))
 
@@ -1986,8 +1986,18 @@ elif page == "Fresh-State Workability":
                 "curing": curing_v2,
             }
             c1, c2, c3 = st.columns(3)
-            with c1: st.metric("Slump Flow", f"{slump_predicted:.0f} mm", f"±{mae:.0f} mm")
-            with c2: st.metric("Workability", status, icon)
+            with c1:
+                st.markdown(f"""<div class="metric-card">
+                    <div class="metric-title">Slump Flow</div>
+                    <div class="metric-value">{slump_predicted:.0f} mm</div>
+                    <div class="metric-sub">±{mae:.0f} mm accuracy</div>
+                </div>""", unsafe_allow_html=True)
+            with c2:
+                st.markdown(f"""<div class="metric-card">
+                    <div class="metric-title">Workability Grade</div>
+                    <div class="metric-value">{icon} {status}</div>
+                    <div class="metric-sub">Based on slump flow range</div>
+                </div>""", unsafe_allow_html=True)
             with c3: st.metric("Model", "RF Trained" if model_used else "Estimate", "1,175 mixes" if model_used else "placeholder")
             st.success(f"Predicted slump flow: {slump_predicted:.0f} mm  ({slump_predicted-mae:.0f}–{slump_predicted+mae:.0f} mm range)")
 
@@ -2253,11 +2263,11 @@ Derived engineering properties are calculated from the predicted compressive str
 | **Tensile Strength (ft)** | Standard-specific formula (e.g. Eurocode 2: 0.30×fc^(2/3) for fc≤50 MPa) |
 | **Elastic Modulus (E)** | Standard-specific formula (e.g. Eurocode 2: 22×(fcm/10)^0.3 GPa) |
 | **Pulse Velocity (UPV)** | Derived from elastic modulus using wave propagation relationship |
-| **Embodied Carbon** | Material quantity × emission factors (approximate USD/region rates) |
-| **Cost per m³** | Material quantity × indicative unit costs (USD — indicative only) |
+| **Embodied Carbon** | Material quantity × emission factors (indicative GBP rates) |
+| **Cost per m³** | Material quantity × indicative unit costs (GBP — indicative only) |
 | **Sustainability Score** | Composite index of strength, carbon, and cost performance |
 
-**Note:** Cost estimates are indicative only, based on approximate USD unit rates. Local material prices vary significantly by region and supplier.
+**Note:** Cost estimates are indicative only, based on indicative GBP unit rates (UK market 2025). Local material prices vary significantly by region and supplier.
     """)
 
     st.markdown("---")
